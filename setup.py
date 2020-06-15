@@ -90,7 +90,7 @@ class BuildFrontEnd(setuptools.command.build_py.build_py):
             rmtree('build/lib/')
 
         try:
-            subprocess.check_call('frontend/gradlew -p frontend clean build', shell=True)
+            subprocess.check_call('frontend/gradlew -p frontend assemble build', shell=True)
         except OSError:
             assert 0, "build failed"
         copy2(self.source_server_file, self.dest_file_name)
@@ -137,6 +137,8 @@ class BuildPlugins(Command):
         self.run_command('build_py')
 
 
+
+import pip
 if __name__ == '__main__':
     version = detect_model_server_version()
 

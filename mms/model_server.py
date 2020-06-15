@@ -100,7 +100,7 @@ def start():
             mms_conf_file = "config.properties"
 
         class_path = \
-            ".:{}".format(os.path.join(mms_home, "mms/frontend/*"))
+            ".:{}".format(os.path.join(mms_home, "frontend/server/build/libs/*"))
 
         if os.path.isfile(mms_conf_file):
             props = load_properties(mms_conf_file)
