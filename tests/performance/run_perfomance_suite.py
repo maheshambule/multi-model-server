@@ -27,6 +27,7 @@ import subprocess
 import yaml
 import requests
 from subprocess import PIPE, STDOUT
+import csv
 from tqdm import tqdm
 from junitparser import TestCase, TestSuite, JUnitXml, Skipped, Error, Failure
 
@@ -92,6 +93,15 @@ def get_options(artifacts_dir, jmeter_path=None):
     return options_str
 
 
+def compare_artifacts(dir1, dir2):
+    ##compare metrics test case wise
+
+    ##plot graphs
+    pass
+
+
+
+
 def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_server):
     if os.path.exists(artifacts_dir):
         raise Exception("Artifacts dir '{}' already exists. Provide different one.".format(artifacts_dir))
@@ -109,7 +119,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
         raise Exception("Server is not running. Pinged url {}. Exiting..".format(server_ping_url))
 
     if monitoring_server:
-        start_monitoring_server = "python {}/metrics_monitoring_server.py --start".format(path)
+        start_monitoring_server = "python3 {}/metrics_monitoring_server.py --start".format(path)
         code, output = run_process(start_monitoring_server, wait=False)
         time.sleep(2)
 
@@ -119,7 +129,9 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
     pre_command = 'export PYTHONPATH={}:$PYTHONPATH; '.format(str(path))
 
     test_yamls = get_test_yamls(test_dir, pattern)
+    out_report_rows = []
     for test_file in tqdm(test_yamls, desc="Test Suites"):
+        out_report_row = []
         suite_name = os.path.basename(test_file).rsplit('.', 1)[0]
         with Timer("Test suite {} execution time".format(suite_name)) as t:
             suit_artifacts_dir = "{}/{}".format(artifacts_dir, suite_name)
@@ -133,6 +145,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
         xunit_file = "{}/xunit.xml".format(suit_artifacts_dir)
         tests, failures, skipped, errors = 0, 0, 0, 0
         err_txt = ""
+        out_report_row = [suite_name]
         ts = TestSuite(suite_name)
         if os.path.exists(xunit_file):
             xml = JUnitXml.fromfile(xunit_file)
@@ -156,6 +169,9 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
                     # TODO Fix html report with system_err
                     # tc.system_err = err_txt[:-4]
                     ts.add_testcase(tc)
+                    out_report_row.extend([name, result._tag])
+                    out_report_rows.append(out_report_row)
+
         else:
             tc = TestCase(suite_name)
             if code:
@@ -185,6 +201,14 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
     if monitoring_server:
         stop_monitoring_server = "python3 {}/metrics_monitoring_server.py --stop".format(path)
         run_process(stop_monitoring_server)
+
+    with open('final_report.csv', 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile, delimiter=',',
+                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+
+        csv_writer.writerows(out_report_rows)
+
+
 
     if junit_xml.errors or junit_xml.failures or junit_xml.skipped:
         sys.exit(3)

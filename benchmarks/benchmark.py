@@ -31,6 +31,7 @@ from urllib.request import urlretrieve
 
 import pandas as pd
 
+
 BENCHMARK_DIR = "/tmp/MMSBenchmark/"
 
 OUT_DIR = os.path.join(BENCHMARK_DIR, 'out/')
@@ -96,7 +97,7 @@ AGGREGATE_REPORT_CSV_LABELS_MAP = {
 
 CELLAR = '/home/ubuntu/.linuxbrew/Cellar/jmeter' if 'linux' in sys.platform else '/usr/local/Cellar/jmeter'
 JMETER_VERSION = os.listdir(CELLAR)[0]
-CMDRUNNER = '{}/{}/libexec/lib/ext/CMDRunner.jar'.format(CELLAR, JMETER_VERSION)
+CMDRUNNER = '{}/{}/libexec/lib/cmdrunner-2.2.jar'.format(CELLAR, JMETER_VERSION)
 JMETER = '{}/{}/libexec/bin/jmeter'.format(CELLAR, JMETER_VERSION)
 MMS_BASE = reduce(lambda val,func: func(val), (os.path.abspath(__file__),) + (os.path.dirname,) * 2)
 JMX_BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'jmx')
@@ -197,7 +198,7 @@ def run_single_benchmark(jmx, jmeter_args=dict(), threads=100, out_dir=None):
         run_process(docker_run_call)
 
     management_port = int(pargs.management[0]) if pargs.management else port + 1
-    time.sleep(300)
+    #time.sleep(300)
 
     try:
         # temp files
@@ -387,8 +388,8 @@ class Benchmarks:
         """
         plan, jmeter_args = parseModel()
         plan = JMX_CONCURRENT_SCALE_CALLS
-        jmeter_args['scale_up_workers'] = 16
-        jmeter_args['scale_down_workers'] = 2
+        jmeter_args['scale_up_workers'] = 2
+        jmeter_args['scale_down_workers'] = 1
         return run_single_benchmark(plan, jmeter_args)
 
     @staticmethod
@@ -418,10 +419,15 @@ class Benchmarks:
 
 
 def run_benchmark():
+
     if hasattr(Benchmarks, benchmark_name):
+
+        #assumes local script. For remote script need to ssh
+        run_process("python3 {} --start".format(pargs.perfmon[0]), wait=False)
         print("Running benchmark {} with model {}".format(benchmark_name, benchmark_model))
         res = getattr(Benchmarks, benchmark_name)()
         pprint.pprint(res)
+        run_process("python3 {} --stop".format(pargs.perfmon[0]), wait=True)
         print('\n')
     else:
         raise Exception("No benchmark benchmark_named {}".format(benchmark_name))
@@ -456,6 +462,8 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--loops', nargs=1, type=int, default=[10], help='Number of loops to run')
     parser.add_argument('-t', '--threads', nargs=1, type=int, default=None, help='Number of jmeter threads to run')
     parser.add_argument('-w', '--workers', nargs=1, type=int, default=None, help='Number of MMS backend workers to use')
+
+    parser.add_argument('-p', '--perfmon-script', dest='perfmon', nargs=1, type=str, default=None, help='Path to perfmon script')
 
     parser.add_argument('--mms', nargs=1, type=str, help='Target an already running instance of MMS instead of spinning up a docker container of MMS.  Specify the target with the format address:port (for http) or protocol://address:port')
     parser.add_argument('--management-port', dest='management', nargs=1, type=str, help='When targeting a running MMS instance, specify the management port')

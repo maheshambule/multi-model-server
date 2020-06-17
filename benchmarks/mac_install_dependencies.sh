@@ -22,7 +22,7 @@ brew update || {
 brew install jmeter --with-plugins || {
 }
 
-wget https://jmeter-plugins.org/get/ -O /usr/local/Cellar/jmeter/4.0/libexec/lib/ext/jmeter-plugins-manager-1.3.jar
-wget http://search.maven.org/remotecontent?filepath=kg/apc/cmdrunner/2.2/cmdrunner-2.2.jar -O /usr/local/Cellar/jmeter/4.0/libexec/lib/cmdrunner-2.2.jar
-java -cp /usr/local/Cellar/jmeter/4.0/libexec/lib/ext/jmeter-plugins-manager-1.3.jar org.jmeterplugins.repository.PluginManagerCMDInstaller
-/usr/local/Cellar/jmeter/4.0/libexec/bin/PluginsManagerCMD.sh install jpgc-synthesis=2.1,jpgc-filterresults=2.1,jpgc-mergeresults=2.1,jpgc-cmd=2.1,jpgc-perfmon=2.1
+wget https://jmeter-plugins.org/get/ -O /usr/local/Cellar/jmeter/5.3/libexec/lib/ext/jmeter-plugins-manager-1.3.jar
+wget http://search.maven.org/remotecontent?filepath=kg/apc/cmdrunner/2.2/cmdrunner-2.2.jar -O /usr/local/Cellar/jmeter/5.3/libexec/lib/cmdrunner-2.2.jar
+java -cp /usr/local/Cellar/jmeter/5.3/libexec/lib/ext/jmeter-plugins-manager-1.3.jar org.jmeterplugins.repository.PluginManagerCMDInstaller
+/usr/local/Cellar/jmeter/5.3/libexec/bin/PluginsManagerCMD.sh install jpgc-synthesis=2.1,jpgc-filterresults=2.2,jpgc-mergeresults=2.1,jpgc-cmd=2.2,jpgc-perfmon=2.1,jpgc-ggl
