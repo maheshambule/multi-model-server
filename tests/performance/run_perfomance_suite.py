@@ -310,7 +310,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
     run_process("vjunit -f {} -o {}".format(junit_xml_path, junit_html_path))
 
     if monitoring_server:
-        stop_monitoring_server = "python3 {}/metrics_monitoring_server.py --stop".format(path)
+        stop_monitoring_server = "python {}/metrics_monitoring_server.py --stop".format(path)
         run_process(stop_monitoring_server)
 
     with open('final_report.csv', 'w', newline='') as csvfile:
