@@ -32,6 +32,7 @@ import csv
 from tqdm import tqdm
 import pandas as pd
 import boto3
+import configuration
 from junitparser import TestCase, TestSuite, JUnitXml, Skipped, Error, Failure
 
 
@@ -100,16 +101,21 @@ def get_options(artifacts_dir, jmeter_path=None):
 def get_folder_names(dir1):
     return [di for di in os.listdir(dir1) if os.path.isdir(os.path.join(dir1, di))]
 
-
-def get_latest_dir(dir1, env_id):
+def get_latest(names, env_id):
     max_ts = 0
     latest_run = ''
-    for run_name in get_folder_names(dir1):
+    for run_name in names:
         run_name_list = run_name.split('_')
         if env_id == run_name_list[0]:
-            if int(run_name_list[1]) > max_ts:
+            if int(run_name_list[2]) > max_ts:
                 max_ts = int(run_name_list[2])
                 latest_run = run_name
+
+    return latest_run
+
+def get_latest_dir(dir1, env_id):
+    names= get_folder_names(dir1)
+    latest_run= get_latest(names, env_id)
     return os.path.join(dir1, latest_run)
 
 
@@ -119,57 +125,84 @@ def get_env_info():
 
 
 def upload_to_s3(local_directory, destination, bucket="regression-reports-123"):
+    run_process("aws s3 cp {} s3://{}/{}  --recursive".format(local_directory, bucket, destination))
 
-    client = boto3.client('s3')
+    # client = boto3.client('s3')
+    #
+    # # enumerate local files recursively
+    # for root, dirs, files in os.walk(local_directory):
+    #     for filename in files:
+    #         # construct the full local path
+    #         local_path = os.path.join(root, filename)
+    #
+    #         # construct the full s3 path
+    #         relative_path = os.path.relpath(local_path, local_directory)
+    #         s3_path = os.path.join(destination, relative_path)
+    #         logger.info('Searching "%s" in "%s"' % (s3_path, bucket))
+    #         try:
+    #             client.head_object(Bucket=bucket, Key=s3_path)
+    #             logger.info("Path found on S3! Skipping %s..." % s3_path)
+    #         except:
+    #             logger.info("Uploading %s..x." % s3_path)
+    #             client.upload_file(local_path, bucket, s3_path)
+    #
 
-    # enumerate local files recursively
-    for root, dirs, files in os.walk(local_directory):
-        for filename in files:
-            # construct the full local path
-            local_path = os.path.join(root, filename)
+def download_s3_files(env_id, tgt_path, bucket_name="regression-reports-123"):
+    import boto3
 
-            # construct the full s3 path
-            relative_path = os.path.relpath(local_path, local_directory)
-            s3_path = os.path.join(destination, relative_path)
-            logger.info('Searching "%s" in "%s"' % (s3_path, bucket))
-            try:
-                client.head_object(Bucket=bucket, Key=s3_path)
-                logger.info("Path found on S3! Skipping %s..." % s3_path)
-            except:
-                logger.info("Uploading %s..." % s3_path)
-                client.upload_file(local_path, bucket, s3_path)
-
-
-def download_s3_files(bucket="regression-reports-123"):
-    # initiate s3 resource
     s3 = boto3.resource('s3')
-    # select bucket
-    my_bucket = s3.Bucket(bucket)
-    # download file into current directory
-    for s3_object in my_bucket.objects.all():
-        filename = s3_object.key
-        try:
-            my_bucket.download_file(s3_object.key, filename)
-        except:
-            pass
+    bucket = s3.Bucket(bucket_name)
+    result = bucket.meta.client.list_objects(Bucket=bucket.name,
+                                             Delimiter='/')
+
+    run_names = []
+    for o in result.get('CommonPrefixes'):
+        run_names.append(o.get('Prefix')[:-1])
+
+    latest_run = get_latest(run_names, env_id)
+    if not latest_run:
+        logger.info("No run found for env_id {}".format(env_id))
+        return False
+
+    if not os.path.exists(tgt_path):
+        os.makedirs(tgt_path)
+
+    tgt_path = "{}/{}".format(tgt_path, latest_run)
+    run_process("aws s3 cp  s3://{}/{} {} --recursive".format(bucket.name, latest_run, tgt_path))
+
+    # for s3_object in bucket.objects.filter(Delimiter='', Prefix=latest_run):
+    #     filename = s3_object.key
+    #     filename= "{}/{}".format(tgt_path, filename)
+    #     parent_path = pathlib.Path(filename).parent
+    #     if not os.path.exists(parent_path):
+    #         os.makedirs(parent_path)
+    #     bucket.download_file(s3_object.key, filename)
+
+    return tgt_path
 
 
-def compare_artifacts(dir1, dir2, out_dir):
+def compare_artifacts(dir1, dir2, out_dir, diff_percent=None):
     ##compare metrics test case wise
+
+    if not diff_percent:
+        diff_percent = float(configuration.get('suite', 'diff_percent', 30))
 
     dir1, dir2 = dir1.strip(), dir2.strip()
 
     if not os.path.exists(dir1):
-        raise Exception("The path {} does not exit".format(dir1))
+        logger.info("The path {} does not exit".format(dir1))
+        return False
 
     if not os.path.exists(dir2):
-        raise Exception("The path {} does not exit".format(dir2))
+        logger.info("The path {} does not exit".format(dir2))
+        return False
 
-    sub_dirs_1 = [x[0].rsplit('/',1)[1] for x in os.walk(dir1)]
-    sub_dirs_2 = [x[0].rsplit('/',1)[1] for x in os.walk(dir2)]
+    over_all_pass = True
+    sub_dirs_1 = list([x[0].rsplit('/',1)[1] for x in os.walk(dir1) if x[0] != dir1])
+    sub_dirs_2 = list([x[0].rsplit('/',1)[1] for x in os.walk(dir2) if x[0] != dir2])
 
     aggregates = ["mean", "max", "min"]
-    header = ["test_suite", "metric", "run1", "run2", "diff"]
+    header = ["test_suite", "metric", "run1", "run2", "percentage_diff", "result"]
     rows = [header]
     print(sub_dirs_1)
     print(sub_dirs_2)
@@ -185,35 +218,71 @@ def compare_artifacts(dir1, dir2, out_dir):
                 metrics_file2 = glob.glob("{}/{}/local_*".format(dir2, sub_dir1))
 
                 if not (metrics_file1 and metrics_file2):
-                    break
-
+                    rows.append([sub_dir1, "log_file", "NA", "NA", "NA", "pass"])
+                    continue
 
             metrics1 = pd.read_csv(metrics_file1[0])
             metrics2 = pd.read_csv(metrics_file2[0])
 
-            for col in metrics1.columns:
+            for col in metrics1.columns[1:]:
                 for agg_func in aggregates:
-                    val1 = getattr(metrics1[str(col)], agg_func)()
-                    val2 = getattr(metrics2[str(col)], agg_func)()
-                    diff = val2 - val1
-
-                    # if diff > set_criteria:
-                    #     raise Exception()
-
                     name = "{}_{}".format(agg_func, str(col))
-                    rows.append([sub_dir1, name, val1, val2, diff])
+                    try:
+                        val1 = getattr(metrics1[str(col)], agg_func)()
+                    except TypeError:
+                        val1 = "NULL"
+                        print(col)
 
-    # run_name1 = os.path.basename(os.path.normpath(dir1))
-    # run_name2 = os.path.basename(os.path.normpath(dir2))
+                    if str(col) in metrics2:
+                        try:
+                            val2 = getattr(metrics2[str(col)], agg_func)()
+                        except TypeError:
+                            val2 = "NULL"
+                    else:
+                        val2 = "NA"
 
-    out_path = "{}/comparison.report".format(out_dir)
+                    if val1 == val2 and val1 == "NULL":
+                         diff = "NULL"
+                         pass_fail = "pass"
+                    elif val1 == "NULL":
+                        diff = val2
+                        pass_fail = "fail"
+                    elif val2 == "NULL":
+                        diff = val1
+                        pass_fail = "fail"
+                    elif val2 == "NA":
+                        diff = val2
+                        pass_fail = "pass"
+                    else:
+                        try:
+                            if val2 != val1:
+                                diff = (abs(val2 - val1) / ((val2 + val1)/2)) * 100
+                                pass_fail = "pass" if diff < diff_percent else "fail"
+                            else: #special case of 0
+                                pass_fail = "pass"
+
+                        except Exception as e:
+                            logger.info("error while calculating the diff {}".format(str(e)))
+                            pass_fail = "fail"
+
+                    if over_all_pass:
+                        over_all_pass = pass_fail == "pass"
+                    rows.append([sub_dir1, name, val1, val2, diff, pass_fail])
+        else:
+            rows.append([sub_dir1, "log_file", "A", "NA", "NA", "pass"])
+
+    out_path = "{}/comparison.csv".format(out_dir)
+    logger.info("Writing comparison report to log file ".format(out_path))
     with open(out_path, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter=',',
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
         csv_writer.writerows(rows)
 
+    return over_all_pass
 
-def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_server, env_name):
+
+def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path,
+                   monitoring_server, env_name, diff_percent):
     if os.path.exists(artifacts_dir):
         raise Exception("Artifacts dir '{}' already exists. Provide different one.".format(artifacts_dir))
 
@@ -310,7 +379,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
     run_process("vjunit -f {} -o {}".format(junit_xml_path, junit_html_path))
 
     if monitoring_server:
-        stop_monitoring_server = "python {}/metrics_monitoring_server.py --stop".format(path)
+        stop_monitoring_server = "python3 {}/metrics_monitoring_server.py --stop".format(path)
         run_process(stop_monitoring_server)
 
     with open('final_report.csv', 'w', newline='') as csvfile:
@@ -319,48 +388,55 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path, monitoring_ser
 
         csv_writer.writerows(out_report_rows)
 
-    latest_dir = get_latest_dir('/tmp/data/', env_name)
-
     path = pathlib.Path(artifacts_dir)
-    print(path.parent)
 
-    commit_id = ""
+    commit_id = subprocess.check_output('git rev-parse --short HEAD'.split()).decode("utf-8")[:-1]
+    new_name = "{}_{}_{}".format(env_name, commit_id, suite_start)
 
-    new_name = "{}/{}_{}_{}/".format(path.parent, env_name, commit_id, suite_start)
+    # new_name_path = "{}/{}/".format(path.parent, new_name)
+    # os.rename(artifacts_dir, new_name_path)
 
-    os.rename(artifacts_dir, new_name)
-    compare_artifacts(artifacts_dir, latest_dir, artifacts_dir)
+    # latest_dir = get_latest_dir("{}/comp_data".format(artifacts_dir) , env_name)
+    # result = compare_artifacts(artifacts_dir, latest_dir, artifacts_dir, diff_percent=diff_percent)
 
-    #upload_to_s3(artifacts_dir, '/{}_{}/'.format(env_name, suite_start))
+    compare_dir = download_s3_files(env_name, "{}/comp_data".format(artifacts_dir))
+    compare_result = True
+    if compare_dir:
+        compare_result = compare_artifacts(artifacts_dir, compare_dir, artifacts_dir, diff_percent=diff_percent)
+
+    upload_to_s3(artifacts_dir, new_name)
 
     if junit_xml.errors or junit_xml.failures or junit_xml.skipped:
         sys.exit(3)
 
+    if not compare_result:
+        sys.exit(4)
 
-compare_artifacts('/Users/mahesh/tmp/data/run6', '/Users/mahesh/tmp/data/run5', '/Users/mahesh/tmp/data/run6')
 
+if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, format="%(message)s", level=logging.INFO)
+    parser = argparse.ArgumentParser(prog='run_perfomance_suite.py', description='Performance Test Suite Runner')
+    parser.add_argument('-a', '--artifacts-dir', nargs=1, type=str, dest='artifacts', required=True,
+                           help='A artifacts directory')
 
-# if __name__ == "__main__":
-#     logging.basicConfig(stream=sys.stdout, format="%(message)s", level=logging.INFO)
-#     parser = argparse.ArgumentParser(prog='run_perfomance_suite.py', description='Performance Test Suite Runner')
-#     parser.add_argument('-a', '--artifacts-dir', nargs=1, type=str, dest='artifacts', required=True,
-#                            help='A artifacts directory')
-#
-#     parser.add_argument('-e', '--env-name', nargs=1, type=bool, dest='env_name', default=[socket.gethostname()],
-#                         help='environment on which MMS server is running')
-#
-#     parser.add_argument('-d', '--test-dir', nargs=1, type=str, dest='test_dir', default=[None],
-#                            help='A test dir')
-#
-#     parser.add_argument('-p', '--pattern', nargs=1, type=str, dest='pattern', default=["*.yaml"],
-#                            help='Test case file name pattern. example *.yaml')
-#
-#     parser.add_argument('-j', '--jmeter-path', nargs=1, type=str, dest='jmeter_path', default=[None],
-#                         help='JMeter executable bin path')
-#
-#     parser.add_argument('-m', '--monitoring-server', nargs=1, type=bool, dest='monitoring_server', default=[True],
-#                         help='Whether to start monitoring server')
-#
-#     args = parser.parse_args()
-#     run_test_suite(args.artifacts[0], args.test_dir[0], args.pattern[0], args.jmeter_path[0],
-#                    args.monitoring_server[0], args.env_name[0])
+    parser.add_argument('-e', '--env-name', nargs=1, type=bool, dest='env_name', default=[socket.gethostname()],
+                        help='environment on which MMS server is running')
+
+    parser.add_argument('-d', '--test-dir', nargs=1, type=str, dest='test_dir', default=[None],
+                           help='A test dir')
+
+    parser.add_argument('-p', '--pattern', nargs=1, type=str, dest='pattern', default=["*.yaml"],
+                           help='Test case file name pattern. example *.yaml')
+
+    parser.add_argument('-j', '--jmeter-path', nargs=1, type=str, dest='jmeter_path', default=[None],
+                        help='JMeter executable bin path')
+
+    parser.add_argument('-m', '--monitoring-server', nargs=1, type=bool, dest='monitoring_server', default=[True],
+                        help='Whether to start monitoring server')
+
+    parser.add_argument('-c', '--diff-percent', nargs=1, type=float, dest='diff_percent', default=[None],
+                        help='Acceptable percentage difference between metrics from previous runs')
+
+    args = parser.parse_args()
+    run_test_suite(args.artifacts[0], args.test_dir[0], args.pattern[0], args.jmeter_path[0],
+                   args.monitoring_server[0], args.env_name[0], args.diff_percent[0])
