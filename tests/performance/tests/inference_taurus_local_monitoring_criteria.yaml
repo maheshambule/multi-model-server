@@ -42,3 +42,4 @@ reporting:
       timeframe: 1s
       stop : true
       fail : true
+      diff_percent : 30
