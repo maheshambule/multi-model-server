@@ -39,6 +39,7 @@ from junitparser import TestCase, TestSuite, JUnitXml, Skipped, Error, Failure
 logger = logging.getLogger(__name__)
 code = 0
 
+S3_BUCKET = configuration.get('suite', 's3_bucket')
 
 class Timer(object):
     def __init__(self, description):
@@ -101,6 +102,7 @@ def get_options(artifacts_dir, jmeter_path=None):
 def get_folder_names(dir1):
     return [di for di in os.listdir(dir1) if os.path.isdir(os.path.join(dir1, di))]
 
+
 def get_latest(names, env_id):
     max_ts = 0
     latest_run = ''
@@ -113,43 +115,14 @@ def get_latest(names, env_id):
 
     return latest_run
 
+
 def get_latest_dir(dir1, env_id):
     names= get_folder_names(dir1)
     latest_run= get_latest(names, env_id)
     return os.path.join(dir1, latest_run)
 
 
-def get_env_info():
-    {"platform" : psutil.os.sys.platform,
-     }
-
-
-def upload_to_s3(local_directory, destination, bucket="regression-reports-123"):
-    run_process("aws s3 cp {} s3://{}/{}  --recursive".format(local_directory, bucket, destination))
-
-    # client = boto3.client('s3')
-    #
-    # # enumerate local files recursively
-    # for root, dirs, files in os.walk(local_directory):
-    #     for filename in files:
-    #         # construct the full local path
-    #         local_path = os.path.join(root, filename)
-    #
-    #         # construct the full s3 path
-    #         relative_path = os.path.relpath(local_path, local_directory)
-    #         s3_path = os.path.join(destination, relative_path)
-    #         logger.info('Searching "%s" in "%s"' % (s3_path, bucket))
-    #         try:
-    #             client.head_object(Bucket=bucket, Key=s3_path)
-    #             logger.info("Path found on S3! Skipping %s..." % s3_path)
-    #         except:
-    #             logger.info("Uploading %s..x." % s3_path)
-    #             client.upload_file(local_path, bucket, s3_path)
-    #
-
-def download_s3_files(env_id, tgt_path, bucket_name="regression-reports-123"):
-    import boto3
-
+def download_s3_files(env_id, tgt_path, bucket_name=S3_BUCKET):
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(bucket_name)
     result = bucket.meta.client.list_objects(Bucket=bucket.name,
@@ -170,25 +143,14 @@ def download_s3_files(env_id, tgt_path, bucket_name="regression-reports-123"):
     tgt_path = "{}/{}".format(tgt_path, latest_run)
     run_process("aws s3 cp  s3://{}/{} {} --recursive".format(bucket.name, latest_run, tgt_path))
 
-    # for s3_object in bucket.objects.filter(Delimiter='', Prefix=latest_run):
-    #     filename = s3_object.key
-    #     filename= "{}/{}".format(tgt_path, filename)
-    #     parent_path = pathlib.Path(filename).parent
-    #     if not os.path.exists(parent_path):
-    #         os.makedirs(parent_path)
-    #     bucket.download_file(s3_object.key, filename)
-
     return tgt_path
 
 
 def compare_artifacts(dir1, dir2, out_dir, diff_percent=None):
-    ##compare metrics test case wise
-
     if not diff_percent:
         diff_percent = float(configuration.get('suite', 'diff_percent', 30))
 
     dir1, dir2 = dir1.strip(), dir2.strip()
-
     if not os.path.exists(dir1):
         logger.info("The path {} does not exit".format(dir1))
         return False
@@ -204,16 +166,22 @@ def compare_artifacts(dir1, dir2, out_dir, diff_percent=None):
     aggregates = ["mean", "max", "min"]
     header = ["test_suite", "metric", "run1", "run2", "percentage_diff", "result"]
     rows = [header]
-    print(sub_dirs_1)
-    print(sub_dirs_2)
     for sub_dir1 in sub_dirs_1:
         if sub_dir1 in sub_dirs_2:
+            test_yaml1 = "{}/{}/{}.yaml".format(dir1, sub_dir1, sub_dir1)
+            with open(test_yaml1) as test_yaml1:
+                test_yaml1 = yaml.safe_load(test_yaml1)
+                for module in  test_yaml1['reporting']:
+                    if module in
+
+            test_yaml2 = "{}/{}/{}.yaml".format(dir2, sub_dir1)
+            with open(test_yaml2) as test_yaml2:
+                test_yaml2 = yaml.safe_load(test_yaml2)
 
             metrics_file1 = glob.glob("{}/{}/SAlogs_*".format(dir1, sub_dir1))
             metrics_file2 = glob.glob("{}/{}/SAlogs_*".format(dir2, sub_dir1))
 
             if not (metrics_file1 and metrics_file2):
-
                 metrics_file1 = glob.glob("{}/{}/local_*".format(dir1, sub_dir1))
                 metrics_file2 = glob.glob("{}/{}/local_*".format(dir2, sub_dir1))
 
@@ -258,7 +226,7 @@ def compare_artifacts(dir1, dir2, out_dir, diff_percent=None):
                             if val2 != val1:
                                 diff = (abs(val2 - val1) / ((val2 + val1)/2)) * 100
                                 pass_fail = "pass" if diff < diff_percent else "fail"
-                            else: #special case of 0
+                            else: # special case of 0
                                 pass_fail = "pass"
 
                         except Exception as e:
@@ -311,7 +279,6 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path,
     test_yamls = get_test_yamls(test_dir, pattern)
     out_report_rows = []
     for test_file in tqdm(test_yamls, desc="Test Suites"):
-        out_report_row = []
         suite_name = os.path.basename(test_file).rsplit('.', 1)[0]
         with Timer("Test suite {} execution time".format(suite_name)) as t:
             suit_artifacts_dir = "{}/{}".format(artifacts_dir, suite_name)
@@ -323,6 +290,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path,
 
         # Assumes default file name
         xunit_file = "{}/xunit.xml".format(suit_artifacts_dir)
+
         tests, failures, skipped, errors = 0, 0, 0, 0
         err_txt = ""
         out_report_row = [suite_name]
@@ -385,11 +353,9 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path,
     with open('final_report.csv', 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter=',',
                                 quotechar='|', quoting=csv.QUOTE_MINIMAL)
-
         csv_writer.writerows(out_report_rows)
 
     path = pathlib.Path(artifacts_dir)
-
     commit_id = subprocess.check_output('git rev-parse --short HEAD'.split()).decode("utf-8")[:-1]
     new_name = "{}_{}_{}".format(env_name, commit_id, suite_start)
 
@@ -404,7 +370,7 @@ def run_test_suite(artifacts_dir, test_dir, pattern, jmeter_path,
     if compare_dir:
         compare_result = compare_artifacts(artifacts_dir, compare_dir, artifacts_dir, diff_percent=diff_percent)
 
-    upload_to_s3(artifacts_dir, new_name)
+    run_process("aws s3 cp {} s3://{}/{}  --recursive".format(artifacts_dir, S3_BUCKET, new_name))
 
     if junit_xml.errors or junit_xml.failures or junit_xml.skipped:
         sys.exit(3)
