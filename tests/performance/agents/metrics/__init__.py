@@ -15,6 +15,8 @@ from enum import Enum
 from statistics import mean
 
 import psutil
+from psutil import NoSuchProcess, ZombieProcess
+
 
 class ProcessType(Enum):
     """ Type of MMS processes to compute metrics on """
@@ -66,6 +68,7 @@ misc_metrics = {
 }
 
 AVAILABLE_METRICS = list(system_metrics) + list(misc_metrics)
+WORKER_NAME = 'model_service_worker.py'
 
 for metric in list(process_metrics):
     for ptype in list(ProcessType):
@@ -83,6 +86,7 @@ for metric in list(process_metrics):
 
 children = set()
 
+
 def get_metrics(server_process, child_processes, logger):
     """ Get Server processes specific metrics
     """
@@ -91,13 +95,14 @@ def get_metrics(server_process, child_processes, logger):
     logger.debug("children : {0}".format(",".join([str(c.pid) for c in children])))
 
     def update_metric(metric_name, proc_type, stats):
-        stats = stats if stats else [0]
+        stats = list(filter(lambda x: isinstance(x, (float, int)), stats))
+        stats = stats if len(stats) else [0]
 
         if proc_type == ProcessType.WORKER:
             proc_name = 'workers'
         elif proc_type == ProcessType.FRONTEND:
             proc_name = 'frontend'
-            result[proc_name+ '_' + metric_name] = stats[0]
+            result[proc_name + '_' + metric_name] = stats[0]
             return
         else:
             proc_name = 'all'
@@ -105,15 +110,23 @@ def get_metrics(server_process, child_processes, logger):
         for op_name in operators:
             result['{}_{}_{}'.format(op_name, proc_name, metric_name)] = operators[op_name](stats)
 
-    # as_dict() gets all stats in one shot
     processes_stats = []
     reclaimed_pids = []
 
-    processes_stats.append({'type': ProcessType.FRONTEND, 'stats': server_process.as_dict()})
+    try:
+        # as_dict() gets all stats in one shot
+        processes_stats.append({'type': ProcessType.FRONTEND, 'stats': server_process.as_dict()})
+    except:
+        pass
     for child in children:
-        if psutil.pid_exists(child.pid):
-            processes_stats.append({'type': ProcessType.WORKER, 'stats' : child.as_dict()})
-        else:
+        try:
+            child_cmdline = child.cmdline()
+            if psutil.pid_exists(child.pid) and len(child_cmdline) >= 2 and WORKER_NAME in child_cmdline[1]:
+                processes_stats.append({'type': ProcessType.WORKER, 'stats': child.as_dict()})
+            else:
+                reclaimed_pids.append(child)
+                logger.debug('child {0} no longer available'.format(child.pid))
+        except (NoSuchProcess, ZombieProcess):
             reclaimed_pids.append(child)
             logger.debug('child {0} no longer available'.format(child.pid))
 
@@ -135,7 +148,7 @@ def get_metrics(server_process, child_processes, logger):
     # Total processes
     result['total_processes'] = len(worker_stats) + 1
     result['total_workers'] = max(len(worker_stats) - 1, 0)
-    result['orphans'] = len(list(filter(lambda p : p['ppid'] == 1, worker_stats)))
+    result['orphans'] = len(list(filter(lambda p: p['ppid'] == 1, worker_stats)))
 
     ### SYSTEM METRICS ###
     result['system_disk_used'] = psutil.disk_usage('/').used
