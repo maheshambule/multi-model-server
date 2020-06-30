@@ -38,6 +38,8 @@ services:
         - sum_workers_file_descriptors
         - total_workers
         - orphans
+        - frontend_memory_rss
+        - sum_all_memory_rss
 
 reporting:
 - module: passfail
@@ -94,3 +96,18 @@ reporting:
       stop: true
       fail: true
       diff_percent: 30
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/frontend_memory_rss
+      condition: '>'
+      threshold: ${FRNTEND_MEM}
+      timeframe: 5s
+      stop : true
+      fail : true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/sum_all_memory_rss
+      condition: '>'
+      threshold: ${TOTAL_MEM}
+      timeframe: 5s
+      stop : true
+      fail : true
+

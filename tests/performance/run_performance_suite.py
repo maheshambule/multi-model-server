@@ -95,8 +95,8 @@ def run_test_suite(artifacts_dir, test_dir, pattern, exclude_pattern,
                 test_file = os.path.join(test_dir, suite_name, "{}.yaml".format(suite_name))
                 with x2junit.X2Junit(suite_name, suite_artifacts_dir, prt.reporter, t, env_name) as s:
                     s.code, s.err = run_process("{} bzt {} {} {} {}".format(pre_command, options_str,
-                                                                            test_file, env_yaml_path,
-                                                                            GLOBAL_CONFIG_PATH))
+                                                                            GLOBAL_CONFIG_PATH, test_file, env_yaml_path,
+                                                                            ))
 
                     update_taurus_metric_files(suite_artifacts_dir, test_file)
 

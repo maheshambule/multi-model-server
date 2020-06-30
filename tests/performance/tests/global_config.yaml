@@ -1,3 +1,33 @@
+---
+execution:
+- concurrency: ${CONCURRENCY}
+  ramp-up: ${RAMP-UP}
+  hold-for: ${HOLD-FOR}
+  scenario: scenario_0
+
+scenarios:
+  scenario_0:
+    script: ${SCRIPT}
+
+
+services:
+  - module: shellexec
+    prepare:
+      - "multi-model-server --start > /dev/null 2>&1"
+      - "sleep 1s"
+    post-process:
+      - "multi-model-server --stop > /dev/null 2>&1"
+  - module: server_local_monitoring
+    ServerLocalClient:
+      - interval: 1s
+        logging : True
+        metrics:
+          - total_processes
+          - orphans
+          - sum_all_file_descriptors
+          - sum_all_memory_rss
+          - frontend_memory_rss
+
 modules:
   jmeter:
     # These are JMeter test case properties. These variables are used in jmx files.
@@ -10,6 +40,10 @@ modules:
       input_filepath : kitten.jpg # make sure jpg is available at this path
       # if relative path is provided this will be relative to current working directory
 
+  server_local_monitoring:
+    class : metrics_monitoring_inproc.Monitor
+
+
 # DO-NOT change properties below unless you know what you are doing.
 # They are needed for performance test suite runner script.
 reporting:
@@ -20,6 +54,41 @@ reporting:
   data-source: sample-labels
 - module: final-stats
   dump-csv : ${BASEDIR}/final_stats.csv
+
+- module: passfail
+  criteria:
+    # Inbuilt Criteria
+    - success of ${API_LABLE}<${API_SUCCESS}, stop as failed
+    - avg-rt of ${API_LABLE}>${API_AVG_RT}, stop as failed
+    # Custom Criteria
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/total_processes
+      condition: '>'
+      threshold: ${TOTAL_PROCS}
+      timeframe: 1s
+      stop : true
+      fail : true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/orphans
+      condition: '>'
+      threshold: ${ORPHAN_PROCS}
+      timeframe: 1s
+      stop: true
+      fail: true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/sum_all_file_descriptors
+      condition: '>'
+      threshold: ${TOTAL_FDS}
+      timeframe: 5s
+      stop : true
+      fail : true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/sum_all_memory_rss
+      condition: '>'
+      threshold: ${TOTAL_MEM}
+      timeframe: 5s
+      stop : true
+      fail : true
 
 settings:
   env:
