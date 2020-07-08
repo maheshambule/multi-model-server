@@ -64,7 +64,8 @@ system_metrics = {
 misc_metrics = {
     'total_processes': None,
     'total_workers': None,
-    'orphans': None
+    'orphans': None,
+    'zombies': None
 }
 
 AVAILABLE_METRICS = list(system_metrics) + list(misc_metrics)
@@ -85,6 +86,7 @@ for metric in list(process_metrics):
                 AVAILABLE_METRICS.append('{}_{}_{}'.format(op, PNAME, metric))
 
 children = set()
+zombie_children = set()
 
 
 def get_metrics(server_process, child_processes, logger):
@@ -118,7 +120,7 @@ def get_metrics(server_process, child_processes, logger):
         processes_stats.append({'type': ProcessType.FRONTEND, 'stats': server_process.as_dict()})
     except:
         pass
-    for child in children:
+    for child in children | zombie_children:
         try:
             child_cmdline = child.cmdline()
             if psutil.pid_exists(child.pid) and len(child_cmdline) >= 2 and WORKER_NAME in child_cmdline[1]:
@@ -126,12 +128,18 @@ def get_metrics(server_process, child_processes, logger):
             else:
                 reclaimed_pids.append(child)
                 logger.debug('child {0} no longer available'.format(child.pid))
-        except (NoSuchProcess, ZombieProcess):
+        except ZombieProcess:
+            zombie_children.add(child)
+        except NoSuchProcess:
             reclaimed_pids.append(child)
             logger.debug('child {0} no longer available'.format(child.pid))
 
     for p in reclaimed_pids:
-        children.remove(p)
+        if p in children:
+            children.remove(p)
+        if p in zombie_children:
+            zombie_children.remove(p)
+
 
     ### PROCESS METRICS ###
     worker_stats = list(map(lambda x: x['stats'], \
@@ -149,8 +157,9 @@ def get_metrics(server_process, child_processes, logger):
     result['total_processes'] = len(worker_stats) + 1
     result['total_workers'] = max(len(worker_stats) - 1, 0)
     result['orphans'] = len(list(filter(lambda p: p['ppid'] == 1, worker_stats)))
+    result['zombies'] = len(zombie_children)
 
-    ### SYSTEM METRICS ###
+    # ###SYSTEM METRICS ###
     result['system_disk_used'] = psutil.disk_usage('/').used
     result['system_memory_percent'] = psutil.virtual_memory().percent
     system_disk_io_counters = psutil.disk_io_counters()

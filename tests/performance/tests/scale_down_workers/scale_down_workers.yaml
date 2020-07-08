@@ -77,13 +77,13 @@ services:
       timeframe: 5s
       stop : ${STOP}
       fail : true
-#    - class: bzt.modules.monitoring.MonitoringCriteria
-#      subject: ServerLocalClient/frontend_memory_rss
-#      condition: '>'
-#      threshold: ${FRNTEND_MEM}
-#      timeframe: 5s
-#      stop : true
-#      fail : true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/frontend_memory_rss
+      condition: '>'
+      threshold: ${FRNTEND_MEM}
+      timeframe: 5s
+      stop : true
+      fail : true
     - class: bzt.modules.monitoring.MonitoringCriteria
       subject: ServerLocalClient/sum_workers_memory_rss
       condition: '>'
@@ -98,6 +98,21 @@ services:
       timeframe: 5s
       stop : ${STOP}
       fail : true
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/orphans
+      condition: '>'
+      threshold: ${TOTAL_ORPHANS}
+      timeframe: 5s
+      stop: ${STOP}
+      fail: true
+      diff_percent_previous: ${TOTAL_ORPHANS_DIFF}
+    - class: bzt.modules.monitoring.MonitoringCriteria
+      subject: ServerLocalClient/zombies
+      condition: '>'
+      threshold: ${TOTAL_ZOMBIES}
+      timeframe: 5s
+      stop: ${STOP}
+      fail: true
 
 ~compare_criteria:
   -

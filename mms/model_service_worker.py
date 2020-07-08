@@ -22,6 +22,7 @@ import platform
 import socket
 import sys
 import signal
+import errno
 
 from mms.arg_parser import ArgParser
 from mms.model_loader import ModelLoaderFactory
@@ -161,6 +162,11 @@ class MXNetModelServiceWorker(object):
             except OSError:
                 pass
 
+    def sigchld_handler(self):
+        # Calling `active_children` has the side effect of `joining` any processes which have already finished
+        logging.info('Active worker count: %s', len(multiprocessing.active_children()))
+
+
     def start_worker(self, cl_socket):
         """
         Method to start the worker threads. These worker threads use multiprocessing to spawn a new worker.
@@ -199,12 +205,22 @@ class MXNetModelServiceWorker(object):
         logging.info("[PID] %d", os.getpid())
         logging.info("MMS worker started.")
         logging.info("Python runtime: %s", platform.python_version())
+        signal.signal(signal.SIGCHLD, lambda signum, frame: self.sigchld_handler())
         while True:
             if self.service is None and self.preload is True:
                 # Lazy loading the models
                 self.load_model(self.model_meta_data)
 
-            (cl_socket, _) = self.sock.accept()
+            # Fix for sock.accept() not ignoring EINTR on SIGCHLD in python2
+            # https://www.python.org/dev/peps/pep-0475/ https://bugs.python.org/issue17097
+            while True:
+                try:
+                    (cl_socket, _) = self.sock.accept()
+                except socket.error as e:
+                    if e.args[0] != errno.EINTR:
+                        raise
+                else:
+                    break
             # workaround error(35, 'Resource temporarily unavailable') on OSX
             cl_socket.setblocking(True)
 

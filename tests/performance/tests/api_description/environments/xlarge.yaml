@@ -19,6 +19,7 @@ settings:
     FRNTEND_MEM: 1500098304
 
     TOTAL_ORPHANS : 0
+    TOTAL_ZOMBIES : 0
 
 
     ## Percent diff values to do a compare across runs
@@ -30,6 +31,7 @@ settings:
     TOTAL_FDS_PREV_DIFF: 30
     FRNTEND_MEM_PREV_DIFF: 30
     TOTAL_ORPHANS_PREV_DIFF: 0
+    TOTAL_ZOMBIES_PREV_DIFF: 0
 
     TOTAL_WORKERS_RUN_DIFF: 0
     TOTAL_WORKERS_MEM_RUN_DIFF: 0
@@ -39,6 +41,7 @@ settings:
     TOTAL_FDS_RUN_DIFF: 185
     FRNTEND_MEM_RUN_DIFF: 30
     TOTAL_ORPHANS_RUN_DIFF: 0
+    TOTAL_ZOMBIES_RUN_DIFF: 0
 
     CONCURRENCY : 10
     RAMP-UP : 1s

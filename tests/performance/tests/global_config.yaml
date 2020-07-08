@@ -43,6 +43,7 @@ services:
         - sum_workers_file_descriptors
         - total_workers
         - orphans
+        - zombies
         - frontend_memory_rss
         - sum_all_memory_rss
         - total_processes
@@ -126,6 +127,14 @@ reporting:
 #      stop: ${STOP}
 #      fail: true
 #      diff_percent_previous: ${TOTAL_ORPHANS_DIFF}
+#    - class: bzt.modules.monitoring.MonitoringCriteria
+#      subject: ServerLocalClient/zombies
+#      condition: '>'
+#      threshold: ${TOTAL_ZOMBIES}
+#      timeframe: 5s
+#      stop: ${STOP}
+#      fail: true
+#      diff_percent_previous: ${TOTAL_ZOMBIES_DIFF}
 
 compare_criteria:
   # Monitoring metrics criteria
@@ -153,6 +162,9 @@ compare_criteria:
   - subject: ServerLocalClient/orphans
     diff_percent_previous: ${TOTAL_ORPHANS_PREV_DIFF}
     diff_percent_run: ${TOTAL_ORPHANS_RUN_DIFF}
+  - subject: ServerLocalClient/zombies
+    diff_percent_previous: ${TOTAL_ZOMBIES_PREV_DIFF}
+    diff_percent_run: ${TOTAL_ZOMBIES_RUN_DIFF}
 
 
 settings:
