@@ -3,6 +3,7 @@ execution:
 - concurrency: ${CONCURRENCY}
   ramp-up: ${RAMP-UP}
   hold-for: ${HOLD-FOR}
+  #iterations : 1
   scenario: scenario_0
 
 scenarios:
@@ -39,7 +40,7 @@ services:
       - "mkdir -p /tmp/ts_model_store"
       - "ps aux | grep '${SERVER_PROCESS_NAME}' | awk '{print $2}' | xargs kill -9 2> /dev/null || true"
       - "${SERVER_START_CMD} --model-store /tmp/ts_model_store > /dev/null 2>&1"
-      - "sleep 20s"
+      - "sleep 5s"
     post-process:
       - "${SERVER_STOP_CMD} > /dev/null 2>&1"
       - "rm ${INPUT_IMG_PATH}"
@@ -190,8 +191,10 @@ settings:
 
     RESNET_152_BATCH_URL : "https://s3.amazonaws.com/model-server/model_archive_1.0/examples/resnet-152-batching/resnet-152.mar"
     RESNET_152_BATCH_NAME : "resnet-152"
-    SQZNET_URL : "https://s3.amazonaws.com/model-server/model_archive_1.0/squeezenet_v1.1.mar"
-    SQZNET_NAME : "squeezenet_v1.1"
+#    SQZNET_URL : "https://s3.amazonaws.com/model-server/model_archive_1.0/squeezenet_v1.1.mar"
+#    SQZNET_NAME : "squeezenet_v1.1"
     RESNET_URL : "https://s3.amazonaws.com/model-server/model_archive_1.0/resnet-18.mar"
     RESNET_NAME : "resnet-18"
+    SQZNET_URL : "https://s3.amazonaws.com/model-server/model_archive_1.0/noop-v1.0.mar"
+    SQZNET_NAME : noop-v1.0
 

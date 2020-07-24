@@ -46,9 +46,9 @@ settings:
     TOTAL_ZOMBIES_RUN_DIFF: 0
 
 
-    CONCURRENCY : 1
+    CONCURRENCY : 10
     RAMP-UP : 1s
-    HOLD-FOR : 300s
+    HOLD-FOR : 5m
     SCRIPT : register_unregister_multiple.jmx
 
     STOP :  ''    #possible values true, false. Bug in bzt so for false use ''

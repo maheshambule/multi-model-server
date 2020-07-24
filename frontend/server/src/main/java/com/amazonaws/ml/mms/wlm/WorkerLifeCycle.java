@@ -157,7 +157,9 @@ public class WorkerLifeCycle {
                                 + '-'
                                 + model.getModelName()
                                         .substring(0, Math.min(model.getModelName().length(), 25));
-                process = Runtime.getRuntime().exec(args, envp, modelPath);
+
+
+                    process = Runtime.getRuntime().exec(args, envp, modelPath);
                 attachIOStreams(threadName, process.getInputStream(), process.getErrorStream());
             }
 
@@ -179,7 +181,14 @@ public class WorkerLifeCycle {
 
     public synchronized void exit() {
         if (process != null) {
-            process.destroyForcibly();
+            process.destroy();
+               try {
+                        process.waitFor(1, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        logger.warn(
+                                "WorkerThread interrupted during waitFor, possible asynch resource cleanup.");
+                    }
+
             connector.clean();
             terminateIOStreams();
         }

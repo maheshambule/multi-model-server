@@ -162,6 +162,7 @@ public class WorkerThread implements Runnable {
                     model.resetFailedInfReqs();
                     break;
                 case LOAD:
+                    logger.info("Load command {}", backendChannel.id().asLongText());
                     String message = reply.getMessage();
                     String tmpdir = System.getProperty("java.io.tmpdir");
                     out =
@@ -178,12 +179,17 @@ public class WorkerThread implements Runnable {
                                 Integer.parseInt(
                                         message.substring(
                                                 message.indexOf("[PID]:") + 6, message.length())));
+
+                        logger.info("PID={}, Load command successs {} {}", lifeCycle.getPid(), backendChannel.id().asLongText(), message);
+
                         lifeCycle.attachIOStreams(
                                 threadName,
                                 Channels.newInputStream(out.getChannel()),
                                 Channels.newInputStream(err.getChannel()));
                         backoffIdx = 0;
                     } else {
+                          logger.info("PID={} Load command error {}", lifeCycle.getPid(), backendChannel.id().asLongText());
+
                         setState(
                                 WorkerState.WORKER_ERROR,
                                 HttpResponseStatus.valueOf(reply.getCode()));
@@ -210,7 +216,7 @@ public class WorkerThread implements Runnable {
                 connect();
                 runWorker();
             } else {
-                // TODO: Move this logic to a seperate ServerThread class
+                // TODO: Move this logic to a separate ServerThread class
                 // This is server thread and shouldn't come out as long as process exists in CPU.
                 model.setPort(port);
                 lifeCycle.startBackendServer(port);
@@ -220,7 +226,7 @@ public class WorkerThread implements Runnable {
             }
         } catch (InterruptedException e) {
             if (state == WorkerState.WORKER_SCALED_DOWN) {
-                logger.debug("Shutting down the thread .. Scaling down.");
+                logger.debug("PID={} Shutting down the thread .. Scaling down.", getPid());
             } else {
                 logger.debug(
                         "Backend worker monitoring thread interrupted or backend worker process died.",
@@ -237,7 +243,9 @@ public class WorkerThread implements Runnable {
             // WorkerThread is running in thread pool, the thread will be assigned to next
             // Runnable once this worker is finished. If currentThread keep holding the reference
             // of the thread, currentThread.interrupt() might kill next worker.
+            logger.debug("PID={} before disconnect {}", getPid(), backendChannel.id().asLongText());
             backendChannel.disconnect();
+            logger.debug("PID={} after disconnect {}", getPid(), backendChannel.id().asLongText());
             currentThread.set(null);
             Integer exitValue = lifeCycle.getExitValue();
 
@@ -250,7 +258,7 @@ public class WorkerThread implements Runnable {
             } else if (serverThread) {
                 model.setPort(-1);
                 if (process != null && process.isAlive()) {
-                    process.destroyForcibly();
+                    process.destroy();
                     try {
                         process.waitFor(1, TimeUnit.SECONDS);
                     } catch (InterruptedException e) {
@@ -314,9 +322,11 @@ public class WorkerThread implements Runnable {
                                     future -> {
                                         latch.countDown();
                                         logger.info(
-                                                "{} Worker disconnected. {}", getWorkerId(), state);
+                                                "PID={} Worker disconnected. {} {}", getPid(), getWorkerId(), state);
                                         Thread thread = currentThread.getAndSet(null);
                                         if (thread != null) {
+                                              logger.info(
+                                                "PID={} Worker thread interrupted. {} {}", getPid(), getWorkerId(), state);
                                             thread.interrupt();
                                         }
                                     });
@@ -350,7 +360,7 @@ public class WorkerThread implements Runnable {
                 throw new WorkerInitializationException(
                         "Worker failed to initialize within " + WORKER_TIMEOUT + " mins");
             }
-            workerId = workerId + "-" + backendChannel.id();
+            workerId = workerId + "-" + backendChannel.id() +"-" +getPid();
             running.set(true);
         } catch (Throwable t) {
             // https://github.com/netty/netty/issues/2597
@@ -377,12 +387,25 @@ public class WorkerThread implements Runnable {
         return lifeCycle.getPid();
     }
 
-    public void shutdown() {
+    public void shutdown(){
         running.set(false);
         setState(WorkerState.WORKER_SCALED_DOWN, HttpResponseStatus.OK);
+        String val = "NoChannelName";
         if (backendChannel != null) {
+            val = backendChannel.id().asLongText();
             model.removeJobQueue(backendChannel.id().asLongText());
+
+            //try {
+            logger.debug("PID={}, removing {}", getPid(), backendChannel.id().asLongText());
+//            Thread.sleep(60000);
+            //backendChannel.writeAndFlush("EXIT\n").addListener(ChannelFutureListener.CLOSE);
             backendChannel.close();
+            logger.debug("PID={}, removed {}", getPid(), backendChannel.id().asLongText());
+//            Thread.sleep(60000);
+            logger.debug("removed2 {}", backendChannel.id().asLongText());
+//              } catch (InterruptedException ex) {
+//               logger.info("Exception in sleep");
+//            }
         }
         if (this.serverThread && this.connector != null) {
             logger.debug("Cleaning connector socket");
@@ -402,10 +425,22 @@ public class WorkerThread implements Runnable {
         }
         Thread thread = currentThread.getAndSet(null);
         if (thread != null) {
+            logger.debug("worker thread interrupt {} {}", val, getPid());
             thread.interrupt();
+            logger.debug("worker thread interrupt after {} {}", val, getPid());
             aggregator.sendError(
                     null, "Worker scaled down.", HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
+
+
+        if (this.serverThread) {
+            try {
+                thread.join(6000L);
+            } catch (InterruptedException e) {
+                logger.error("Server thread join interrupted");
+            }
+        }
+
     }
 
     public boolean isServerThread() {

@@ -28,7 +28,7 @@
           </elementProp>
           <elementProp name="scale_up_workers" elementType="Argument">
             <stringProp name="Argument.name">scale_up_workers</stringProp>
-            <stringProp name="Argument.value">2</stringProp>
+            <stringProp name="Argument.value">20</stringProp>
             <stringProp name="Argument.desc">Numer of workers to scale up to</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>

@@ -159,11 +159,19 @@ def _retrieve_buffer(conn, length):
     while length > 0:
         pkt = conn.recv(length)
         if len(pkt) == 0:
-            logging.info("Frontend disconnected.")
+            logging.info("PID %s, Frontend disconnected.", os.getpid())
             raise ValueError("Frontend disconnected")
+
+        # if pkt.startswith(b'EXIT'):
+        #     logging.info("PID %s, Frontend Exit recieved.", os.getpid())
+        #     raise ValueError("Frontend Exit")
+
+        logging.info("PID %s, data is %s. length is=%s", os.getpid(), pkt, length)
 
         data += pkt
         length -= len(pkt)
+
+    logging.info("PID %s, data is %s. length is=%s", os.getpid(), data, length)
 
     return data
 

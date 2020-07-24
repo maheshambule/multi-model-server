@@ -2,11 +2,11 @@
 scenarios:
   scenario_0:
     script: register_unregister_multiple.jmx
-
-services:
-  - module: shellexec
-    prepare:
-      - "curl -s -X POST http://localhost:8081/models?url=${RESNET_URL}"
+#
+#services:
+#  - module: shellexec
+#    prepare:
+#      - "curl -s -X POST http://localhost:8081/models?url=${RESNET_URL}"
 
 
 ~reporting:

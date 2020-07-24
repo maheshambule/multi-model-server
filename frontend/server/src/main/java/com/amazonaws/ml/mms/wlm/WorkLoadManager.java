@@ -140,30 +140,63 @@ public class WorkLoadManager {
         }
     }
 
-    private CompletableFuture<HttpResponseStatus> shutdownServerThread(
-            Model model, CompletableFuture<HttpResponseStatus> future) {
-        model.getServerThread().shutdown();
-        WorkerLifeCycle lifecycle = model.getServerThread().getLifeCycle();
-        Process workerProcess = lifecycle.getProcess();
+
+    private CompletableFuture<HttpResponseStatus> shutdownThread(
+            WorkerThread workerThread, CompletableFuture<HttpResponseStatus> future) {
+        workerThread.shutdown();
+        WorkerLifeCycle lifecycle = workerThread.getLifeCycle();
+        Process workerProcess = lifecycle.getProcess()
         if (workerProcess.isAlive()) {
+            logger.info("PID={}, killing the worker pid {}",workerProcess.getPid())
             boolean workerDestroyed = false;
-            workerProcess.destroyForcibly();
+            workerProcess.destroy();
             try {
                 workerDestroyed =
                         workerProcess.waitFor(
                                 configManager.getUnregisterModelTimeout(), TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 logger.warn(
-                        "WorkerThread interrupted during waitFor, possible asynch resource cleanup.");
+                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.getPid());
                 future.complete(HttpResponseStatus.INTERNAL_SERVER_ERROR);
                 return future;
             }
             if (!workerDestroyed) {
-                logger.warn("WorkerThread timed out while cleaning, please resend request.");
+                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.getPid());
                 future.complete(HttpResponseStatus.REQUEST_TIMEOUT);
                 return future;
             }
         }
+        logger.info("PID={}, Worker already killed", workerProcess.getPid())
+        future.complete(HttpResponseStatus.OK);
+        return future;
+    }
+
+    private CompletableFuture<HttpResponseStatus> shutdownServerThread(
+            Model model, CompletableFuture<HttpResponseStatus> future) {
+        model.getServerThread().shutdown();
+        WorkerLifeCycle lifecycle = model.getServerThread().getLifeCycle();
+        Process workerProcess = lifecycle.getProcess();
+        if (workerProcess.isAlive()) {
+            logger.info("PID={}, killing the worker pid {}",workerProcess.getPid())
+            boolean workerDestroyed = false;
+            workerProcess.destroy();
+            try {
+                workerDestroyed =
+                        workerProcess.waitFor(
+                                configManager.getUnregisterModelTimeout(), TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                logger.warn(
+                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.getPid());
+                future.complete(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+                return future;
+            }
+            if (!workerDestroyed) {
+                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.getPid());
+                future.complete(HttpResponseStatus.REQUEST_TIMEOUT);
+                return future;
+            }
+        }
+        logger.info("PID={}, Worker already killed", workerProcess.getPid())
         future.complete(HttpResponseStatus.OK);
         return future;
     }

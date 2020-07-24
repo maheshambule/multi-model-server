@@ -22,6 +22,7 @@ import platform
 import socket
 import sys
 import signal
+import traceback
 
 from mms.arg_parser import ArgParser
 from mms.model_loader import ModelLoaderFactory
@@ -32,6 +33,28 @@ MAX_FAILURE_THRESHOLD = 5
 SOCKET_ACCEPT_TIMEOUT = 30.0
 DEBUG = False
 
+
+def write_to_file(msg="default text"):
+    with open("/Users/demo/git/multi-model-server/tests/performance/myfile.txt", "a+") as file1:
+        # Writing data to a file
+        file1.write("PID="+str(os.getpid())+" "+msg+"\n")
+
+
+def log_trace(frame):
+    tb_lines = [ line.rstrip('\n') for line in
+                 traceback.format_stack(frame)]
+
+    return  tb_lines
+
+
+def sigterm_handler1(a, b):
+    write_to_file("sigterm_handler1")
+    logging.info("PID=%s, received sigterm", os.getpid())
+    # for node in [self.socket_name, self.out, self.err]:
+    #     try:
+    #         os.remove(node)
+    #     except OSError:
+    #         pass
 
 class MXNetModelServiceWorker(object):
     """
@@ -107,7 +130,9 @@ class MXNetModelServiceWorker(object):
             if self.service is None or self.preload is False:
                 self.model_loader = ModelLoaderFactory.get_model_loader(model_dir)
                 self.service = self.model_loader.load(model_name, model_dir, handler, gpu, batch_size)
-                logging.info("Model %s loaded io_fd=%s", model_name, str(io_fd))
+                logging.info("PID=%s, Model %s loaded io_fd=%s", os.getpid(), model_name, str(io_fd))
+
+            logging.info("PID=%s, loaded model=%s", os.getpid(), model_name)
             return "loaded model {}. [PID]:{}".format(model_name, os.getpid()), 200
 
         except MemoryError:
@@ -133,9 +158,11 @@ class MXNetModelServiceWorker(object):
         :param cl_socket:
         :return:
         """
+        write_to_file("handle connection")
         cl_socket.setblocking(True)
         while True:
             cmd, msg = retrieve_msg(cl_socket)
+            write_to_file("Recieved cmd {}".format(cmd))
             if cmd == b'I':
                 resp = self.service.predict(msg)
                 cl_socket.send(resp)
@@ -148,42 +175,78 @@ class MXNetModelServiceWorker(object):
                 if code != 200:
                     raise RuntimeError("{} - {}".format(code, result))
             else:
+                logging.info("PID=%s, Received command %s", os.getpid(), cmd)
                 raise ValueError("Received unknown command: {}".format(cmd))
 
             if self.service is not None and self.service.context is not None \
                and self.service.context.metrics is not None:
                 emit_metrics(self.service.context.metrics.store)
 
-    def sigterm_handler(self):
+
+    def sigterm_handler(self, signum, frame):
+        write_to_file("sigterm_handler1 {}".format(log_trace(frame)))
+        logging.info("PID=%s, received sigterm", os.getpid())
         for node in [self.socket_name, self.out, self.err]:
             try:
                 os.remove(node)
             except OSError:
                 pass
 
-    def start_worker(self, cl_socket):
+    def sigterm_handler2(self, signum, fram):
+        write_to_file("sig_handler2 {} server worker".format(signum))
+        logging.info("PID=%s, received signal  %s server worker", os.getpid(), signum)
+        for p in multiprocessing.active_children():
+            write_to_file("killing pid {}".format(p.pid))
+            p.terminate()
+
+    def sigterm_handler3(self, signum, fram):
+        write_to_file("sig_handler3 {} server worker".format(signum))
+        logging.info("PID=%s, received signal  %s server worker", os.getpid(), signum)
+
+    def sigterm_handler4(self, signum, fram):
+        write_to_file("sig_handler4 {} server worker".format(signum))
+        logging.info("PID=%s, received signal  %s server worker", os.getpid(), signum)
+
+    def  start_worker(self, cl_socket):
         """
         Method to start the worker threads. These worker threads use multiprocessing to spawn a new worker.
 
         :param cl_socket:
         :return:
         """
+
+        logging.info("[PID] %d", os.getpid())
         self.sock.close() # close listening socket in the fork
         try:
-            signal.signal(signal.SIGTERM, lambda signum, frame: self.sigterm_handler())
+            signal.signal(signal.SIGTERM, self.sigterm_handler)
             self.handle_connection(cl_socket)
-        except Exception:  # pylint: disable=broad-except
-            logging.error("Backend worker process died.", exc_info=True)
+        except Exception as e:  # pylint: disable=broad-except
+            write_to_file("Backend worker process died."+ str(e))
+            logging.error("PID=%s, Backend worker process died.", os.getpid(), exc_info=True)
         finally:
+            logging.info("PID=%s, in finally block", os.getpid())
             try:
                 self.model_loader.unload()
+                write_to_file("About to flush")
                 sys.stdout.flush()
                 os.remove(self.out)
                 os.remove(self.err)
+                write_to_file("About to flush1")
             finally:
+                write_to_file("About to flush2")
                 cl_socket.shutdown(socket.SHUT_RDWR)
+                write_to_file("About to flush3")
                 cl_socket.close()
+                write_to_file("About to exit")
+                logging.info("PID=%s, in last finally block", os.getpid())
                 sys.exit(0)
+
+    def sigchld_handler(self, signum, frame):
+        # Calling `active_children` has the side effect of `joining` any processes which have already finished
+        val = len(multiprocessing.active_children())
+        frame = ''.join(log_trace(frame))
+        # write_to_file("active count  {} frame".format(val))
+        logging.info('Active worker count: %s %s', val, frame)
 
     def run_server(self):
         """
@@ -199,6 +262,10 @@ class MXNetModelServiceWorker(object):
         logging.info("[PID] %d", os.getpid())
         logging.info("MMS worker started.")
         logging.info("Python runtime: %s", platform.python_version())
+        signal.signal(signal.SIGCHLD, self.sigchld_handler)
+        signal.signal(signal.SIGTERM, self.sigterm_handler2)
+       # signal.signal(signal.SIGKILL, self.sigterm_handler3)
+        signal.signal(signal.SIGINT, self.sigterm_handler4)
         while True:
             if self.service is None and self.preload is True:
                 # Lazy loading the models
@@ -208,10 +275,17 @@ class MXNetModelServiceWorker(object):
             # workaround error(35, 'Resource temporarily unavailable') on OSX
             cl_socket.setblocking(True)
 
-            logging.info("Connection accepted: %s.", cl_socket.getsockname())
+
+
+            logging.info("PID=%s, Connection accepted: %s.", os.getpid(), cl_socket.getsockname())
             p = multiprocessing.Process(target=self.start_worker, args=(cl_socket,))
             p.start()
+            write_to_file("closing the socket in parent")
             cl_socket.close() # close accepted socket in the parent
+
+            logging.info("PID=%s, started process %s", os.getpid(), p.pid)
+
+        logging.info("PID=%s, outside process", os.getpid())
 
 if __name__ == "__main__":
     # Remove mms dir from python path to avoid module name conflict.
@@ -240,10 +314,12 @@ if __name__ == "__main__":
 
         worker.run_server()
     except socket.timeout:
-        logging.error("Backend worker did not receive connection in: %d", SOCKET_ACCEPT_TIMEOUT)
+        logging.error("Backend main worker did not receive connection in: %d", SOCKET_ACCEPT_TIMEOUT)
     except Exception:  # pylint: disable=broad-except
-        logging.error("Backend worker process died", exc_info=True)
+        logging.error("Backend main worker process died", exc_info=True)
     finally:
+        logging.info("socket file removing %s", socket_name)
+        write_to_file("socket file removing {}".format(socket_name))
         if sock_type == 'unix' and os.path.exists(socket_name):
             os.remove(socket_name)
 
