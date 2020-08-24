@@ -1,4 +1,12 @@
 ---
+
+execution:
+- concurrency: ${CONCURRENCY}
+  ramp-up: ${RAMP-UP}
+  iterations : 10000
+  scenario: scenario_0
+
+
 scenarios:
   scenario_0:
     script: register_unregister_multiple.jmx

@@ -145,9 +145,9 @@ public class WorkLoadManager {
             WorkerThread workerThread, CompletableFuture<HttpResponseStatus> future) {
         workerThread.shutdown();
         WorkerLifeCycle lifecycle = workerThread.getLifeCycle();
-        Process workerProcess = lifecycle.getProcess()
+        Process workerProcess = lifecycle.getProcess();
         if (workerProcess.isAlive()) {
-            logger.info("PID={}, killing the worker pid {}",workerProcess.getPid())
+            logger.info("PID={}, killing the worker pid {}", workerProcess.pid());
             boolean workerDestroyed = false;
             workerProcess.destroy();
             try {
@@ -156,17 +156,17 @@ public class WorkLoadManager {
                                 configManager.getUnregisterModelTimeout(), TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 logger.warn(
-                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.getPid());
+                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.pid());
                 future.complete(HttpResponseStatus.INTERNAL_SERVER_ERROR);
                 return future;
             }
             if (!workerDestroyed) {
-                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.getPid());
+                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.pid());
                 future.complete(HttpResponseStatus.REQUEST_TIMEOUT);
                 return future;
             }
         }
-        logger.info("PID={}, Worker already killed", workerProcess.getPid())
+        logger.info("PID={}, Worker already killed", workerProcess.pid());
         future.complete(HttpResponseStatus.OK);
         return future;
     }
@@ -177,7 +177,7 @@ public class WorkLoadManager {
         WorkerLifeCycle lifecycle = model.getServerThread().getLifeCycle();
         Process workerProcess = lifecycle.getProcess();
         if (workerProcess.isAlive()) {
-            logger.info("PID={}, killing the worker pid {}",workerProcess.getPid())
+            logger.info("PID={}, killing the worker pid {}",workerProcess.pid());
             boolean workerDestroyed = false;
             workerProcess.destroy();
             try {
@@ -186,17 +186,17 @@ public class WorkLoadManager {
                                 configManager.getUnregisterModelTimeout(), TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 logger.warn(
-                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.getPid());
+                        "PID={}, WorkerThread interrupted during waitFor, possible asynch resource cleanup.",workerProcess.pid());
                 future.complete(HttpResponseStatus.INTERNAL_SERVER_ERROR);
                 return future;
             }
             if (!workerDestroyed) {
-                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.getPid());
+                logger.warn("PID={}, WorkerThread timed out while cleaning, please resend request.",workerProcess.pid());
                 future.complete(HttpResponseStatus.REQUEST_TIMEOUT);
                 return future;
             }
         }
-        logger.info("PID={}, Worker already killed", workerProcess.getPid())
+        logger.info("PID={}, Worker already killed", workerProcess.pid());
         future.complete(HttpResponseStatus.OK);
         return future;
     }

@@ -433,13 +433,13 @@ public class WorkerThread implements Runnable {
         }
 
 
-        if (this.serverThread) {
-            try {
-                thread.join(6000L);
-            } catch (InterruptedException e) {
-                logger.error("Server thread join interrupted");
-            }
-        }
+//         if (this.serverThread) {
+//             try {
+//                 thread.join(6000L);
+//             } catch (InterruptedException e) {
+//                 logger.error("Server thread join interrupted");
+//             }
+//         }
 
     }
 

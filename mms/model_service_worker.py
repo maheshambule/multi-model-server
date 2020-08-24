@@ -195,9 +195,17 @@ class MXNetModelServiceWorker(object):
     def sigterm_handler2(self, signum, fram):
         write_to_file("sig_handler2 {} server worker".format(signum))
         logging.info("PID=%s, received signal  %s server worker", os.getpid(), signum)
+        arr = []
         for p in multiprocessing.active_children():
-            write_to_file("killing pid {}".format(p.pid))
+            write_to_file("registering child pid to kill {}".format(p.pid))
+            arr.append(p)
+
+        for p in arr:
+            write_to_file("killing child pid {}".format(p.pid))
             p.terminate()
+
+        write_to_file("sig_handler2 {} server worker exiting".format(signum))
+        os.kill(os.getpid(), 9)
 
     def sigterm_handler3(self, signum, fram):
         write_to_file("sig_handler3 {} server worker".format(signum))
@@ -207,7 +215,7 @@ class MXNetModelServiceWorker(object):
         write_to_file("sig_handler4 {} server worker".format(signum))
         logging.info("PID=%s, received signal  %s server worker", os.getpid(), signum)
 
-    def  start_worker(self, cl_socket):
+    def start_worker(self, cl_socket):
         """
         Method to start the worker threads. These worker threads use multiprocessing to spawn a new worker.
 
